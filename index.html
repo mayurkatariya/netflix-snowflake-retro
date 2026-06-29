@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Netflix — Snowflake Support Case Retrospective — June 2026</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #f0f4f8;
+      color: #1a2b3c;
+      line-height: 1.6;
+      font-size: 15px;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: linear-gradient(135deg, #0d3349 0%, #11567f 60%, #29b5e8 100%);
+      color: white;
+      padding: 48px 60px 40px;
+    }
+    .header-top {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      margin-bottom: 24px;
+    }
+    .logo-group {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .logo-divider {
+      width: 1px;
+      height: 36px;
+      background: rgba(255,255,255,0.35);
+    }
+    .header h1 {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+    .header-meta {
+      display: flex;
+      gap: 32px;
+      font-size: 13px;
+      opacity: 0.85;
+    }
+    .header-meta span { display: flex; align-items: center; gap: 6px; }
+
+    /* ── Layout ── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 40px 60px 80px; }
+
+    /* ── Section headers ── */
+    h2 {
+      font-size: 19px;
+      font-weight: 700;
+      color: #0d3349;
+      margin: 48px 0 20px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #29b5e8;
+    }
+
+    /* ── Overview card ── */
+    .overview {
+      background: white;
+      border-left: 4px solid #29b5e8;
+      border-radius: 8px;
+      padding: 20px 24px;
+      font-size: 15px;
+      color: #334155;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+      margin-top: 32px;
+    }
+
+    /* ── Stats row ── */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin: 28px 0;
+    }
+    .stat-card {
+      background: white;
+      border-radius: 10px;
+      padding: 20px;
+      text-align: center;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+      border-top: 3px solid #29b5e8;
+    }
+    .stat-card .num { font-size: 32px; font-weight: 800; color: #0d3349; }
+    .stat-card .label { font-size: 12px; color: #64748b; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* ── Summary table ── */
+    .table-wrap {
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+      overflow-x: auto;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 1000px; }
+    thead { background: #0d3349; color: white; }
+    thead th {
+      padding: 13px 16px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    tbody tr { border-bottom: 1px solid #e2e8f0; transition: background 0.15s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #f8fafc; }
+    td { padding: 14px 16px; vertical-align: top; }
+    td:first-child { font-weight: 600; color: #0d3349; white-space: nowrap; }
+    .td-meta { color: #64748b; font-size: 12px; margin-top: 2px; }
+    .td-code { font-family: "SF Mono", "Fira Code", monospace; font-size: 12px; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; display: inline-block; margin-top: 4px; color: #334155; }
+
+    /* ── Status badges ── */
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .badge-green  { background: #dcfce7; color: #15803d; }
+    .badge-amber  { background: #fef9c3; color: #92400e; }
+    .badge-split  { display: inline-flex; align-items: center; gap: 0; font-size: 12px; font-weight: 600; border-radius: 20px; overflow: hidden; white-space: nowrap; }
+    .badge-split .b1 { background: #dcfce7; color: #15803d; padding: 3px 10px; }
+    .badge-split .b2 { background: #fef9c3; color: #92400e; padding: 3px 10px; border-left: 1px solid #e2e8f0; }
+    .badge-blue   { background: #dbeafe; color: #1e40af; }
+    .badge-none   { background: #f0fdf4; color: #166534; }
+
+    /* ── Impact pill ── */
+    .impact-none   { color: #15803d; font-weight: 600; }
+    .impact-resolved { color: #15803d; font-weight: 600; }
+
+    /* ── Case detail cards ── */
+    .case-card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+      margin-bottom: 28px;
+      overflow: hidden;
+    }
+    .case-card-header {
+      padding: 20px 28px;
+      border-bottom: 1px solid #e2e8f0;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .case-card-header-left h3 {
+      font-size: 17px;
+      font-weight: 700;
+      color: #0d3349;
+    }
+    .case-card-header-left .meta {
+      font-size: 12.5px;
+      color: #64748b;
+      margin-top: 5px;
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .case-card-header-left .meta span::before { content: "· "; }
+    .case-card-header-left .meta span:first-child::before { content: ""; }
+    .case-card-body { padding: 24px 28px; }
+
+    .section-block { margin-bottom: 20px; }
+    .section-block:last-child { margin-bottom: 0; }
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #94a3b8;
+      margin-bottom: 6px;
+    }
+    .section-block p { color: #334155; font-size: 14.5px; }
+
+    .jira-ref {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 12px;
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      padding: 4px 10px;
+      border-radius: 6px;
+      color: #0d3349;
+      margin-right: 8px;
+      margin-top: 4px;
+    }
+    .jira-ref svg { width: 13px; height: 13px; fill: #0052cc; }
+    .sf-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      color: #0176d3;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .sf-link:hover { text-decoration: underline; }
+    .sf-link svg { width: 12px; height: 12px; fill: #0176d3; }
+
+    .next-steps-box {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-left: 3px solid #29b5e8;
+      border-radius: 6px;
+      padding: 14px 18px;
+      font-size: 14px;
+      color: #334155;
+    }
+
+    code {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 12.5px;
+      background: #f1f5f9;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #0d3349;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      text-align: center;
+      padding: 36px 0 0;
+      font-size: 13px;
+      color: #94a3b8;
+      border-top: 1px solid #e2e8f0;
+    }
+    .footer strong { color: #11567f; }
+  </style>
+</head>
+<body>
+
+<!-- ══ HEADER ══ -->
+<div class="header">
+  <div class="header-top">
+    <div class="logo-group">
+      <img src="https://images.icon-icons.com/2699/PNG/512/netflix_logo_icon_170919.png" alt="Netflix" style="height: 44px; width: auto;" />
+      <div class="logo-divider"></div>
+      <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/ff/Snowflake_Logo.svg/3840px-Snowflake_Logo.svg.png" alt="Snowflake" style="height: 32px; width: auto; filter: brightness(0) invert(1);" />
+    </div>
+    <h1>Netflix — Snowflake Support Case Retrospective</h1>
+  </div>
+  <div class="header-meta">
+    <span>Prepared for: Netflix BDAP Team — Sankari Dhandapani</span>
+    <span>Prepared by: Mayur Katariya &amp; Phil Stocker</span>
+    <span>Date: June 29, 2026</span>
+    <span>Cases covered: 4</span>
+  </div>
+</div>
+
+<!-- ══ MAIN CONTENT ══ -->
+<div class="container">
+
+  <!-- Overview -->
+  <div class="overview">
+    Four support cases were opened over the past two months related to your data sharing and clean room infrastructure. All four are fully resolved or operationally unblocked. One has a parallel product fix actively in development with no current operational impact.
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat-card">
+      <div class="num">4</div>
+      <div class="label">Cases opened</div>
+    </div>
+    <div class="stat-card" style="border-top-color: #22c55e;">
+      <div class="num" style="color: #15803d;">4</div>
+      <div class="label">Resolved / Unblocked</div>
+    </div>
+    <div class="stat-card" style="border-top-color: #f59e0b;">
+      <div class="num" style="color: #92400e;">1</div>
+      <div class="label">Parallel Fix In Progress</div>
+    </div>
+    <div class="stat-card" style="border-top-color: #22c55e;">
+      <div class="num" style="color: #15803d;">0</div>
+      <div class="label">Active Data Impact</div>
+    </div>
+  </div>
+
+  <!-- Summary Table -->
+  <h2>Case Summary</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:14%">Case</th>
+          <th style="width:14%">Issue</th>
+          <th style="width:22%">Root Cause</th>
+          <th style="width:9%">Data Impact</th>
+          <th style="width:11%">Status</th>
+          <th style="width:30%">Next Steps</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://snowforce.lightning.force.com/lightning/r/Case/500VI00000yEfwoYAC/view" target="_blank" class="sf-link">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+              01376791
+            </a>
+            <div class="td-meta">Jun 12 · Ankit Jain</div>
+            <div class="td-code">SNOW-3644746</div>
+          </td>
+          <td>VideoAmp partner access blocked ("Error in secure object")</td>
+          <td>VideoAmp IAM policy restricted S3 access by VPC ID. Snowflake VPC rotation caused new IDs to be absent from the allowlist.</td>
+          <td class="impact-resolved">Resolved</td>
+          <td><span class="badge badge-green">Fully Resolved</span></td>
+          <td>Complete VPC allowlist updates across remaining accounts using <code>SYSTEM$GET_SNOWFLAKE_PLATFORM_INFO()</code>.</td>
+        </tr>
+        <tr>
+          <td>
+            <a href="https://snowforce.lightning.force.com/lightning/r/Case/500VI00000yQxGSYA0/view" target="_blank" class="sf-link">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+              01380107
+            </a>
+            <div class="td-meta">Jun 16 · Alex Bohr</div>
+            <div class="td-code">SNOW-3671107</div>
+          </td>
+          <td>Listing refresh timeout errors</td>
+          <td>Regression in Snowflake's cross-region messaging service. Refreshes completed successfully — only acknowledgement signal was delayed.</td>
+          <td class="impact-none">None</td>
+          <td><span class="badge-split"><span class="b1">Unblocked</span><span class="b2">Fix In Progress</span></span></td>
+          <td>Pipelines unblocked via catch-and-verify workaround. Parallel product fix (async model) in progress (~2 wks). Snowflake will notify on deployment.</td>
+        </tr>
+        <tr>
+          <td>
+            <a href="https://snowforce.lightning.force.com/lightning/r/Case/500VI00000yqcpyYAA/view" target="_blank" class="sf-link">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+              01387602
+            </a>
+            <div class="td-meta">Jun 24 · Alex Bohr</div>
+            <div class="td-code">No Jira filed</div>
+          </td>
+          <td>Row count discrepancy in shared clean room view (176,494 vs 98,310)</td>
+          <td>No data loss. COUNT ran on producer (US East); INSERT ran on consumer (EU Central) ~2 hrs behind due to normal cross-cloud replication lag.</td>
+          <td class="impact-none">None</td>
+          <td><span class="badge badge-green">Resolved</span></td>
+          <td>Implement <code>AVAILABLE_LISTING_REFRESH_HISTORY</code> polling before INSERT operations.</td>
+        </tr>
+        <tr>
+          <td>
+            <a href="https://snowforce.lightning.force.com/lightning/r/Case/500VI00000ytWzDYAU/view" target="_blank" class="sf-link">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+              01388550
+            </a>
+            <div class="td-meta">Jun 25 · Raymond Liu</div>
+            <div class="td-code">SNOW-3707703</div>
+            <div class="td-code">SNOW-1822996</div>
+          </td>
+          <td>SQL errors on TF1 Iceberg tables — Azure West Europe</td>
+          <td>Cross-cloud copy silently wrote zero-byte files to Azure interop storage for the Jun 24 partition. No Netflix-side changes contributed.</td>
+          <td class="impact-resolved">Resolved</td>
+          <td><span class="badge badge-green">Mitigation Applied</span></td>
+          <td>No action required. Monitor for recurrence; flag to Snowflake Support immediately if observed.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ══ CASE DETAILS ══ -->
+  <h2>Case Details</h2>
+
+  <!-- Case 01376791 (moved to top) -->
+  <div class="case-card">
+    <div class="case-card-header">
+      <div class="case-card-header-left">
+        <h3>Case 01376791 — External Partner (VideoAmp) Access Blocked</h3>
+        <div class="meta">
+          <span>Opened: June 12, 2026</span>
+          <span>Contact: Ankit Jain (ankitj@netflix.com)</span>
+          <span>Jira: SNOW-3644746</span>
+          <span><a href="https://snowforce.lightning.force.com/lightning/r/Case/500VI00000yEfwoYAC/view" target="_blank" class="sf-link">View in Salesforce ↗</a></span>
+        </div>
+      </div>
+      <span class="badge badge-green">Fully Resolved</span>
+    </div>
+    <div class="case-card-body">
+      <div class="section-block">
+        <div class="section-label">What Happened</div>
+        <p>VideoAmp was unable to run analyses in your shared clean room, receiving a masked "Error in secure object" error. The clean room had been operating normally for months prior to June 9.</p>
+      </div>
+      <div class="section-block">
+        <div class="section-label">Root Cause</div>
+        <p>VideoAmp's AWS IAM policy for the role accessing Netflix's S3-backed Iceberg tables included a VPC restriction (<code>aws:SourceVpc</code> condition on the <code>BdpSnowflakeVideoAmp</code> IAM role). When Snowflake's VPC IDs rotated, the new IDs were not on the allowlist, causing all S3 data reads to be blocked — surfaced to the end user as the masked error.</p>
+        <p style="margin-top: 10px;">The four VPC IDs added to resolve the issue:</p>
+        <div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px;">
+          <code>vpc-0d71c4cb01df306c0</code>
+          <code>vpc-0112c764382c46395</code>
+          <code>vpc-07ed36a09d3735785</code>
+          <code>vpc-0598249688350681c</code>
+        </div>
+      </div>
+      <div class="section-block">
+        <div class="section-label">Where Things Stand Today</div>
+        <p>Fully resolved. The required Snowflake VPC IDs were added to the allowlist and partner access was restored. VideoAmp is running queries successfully.</p>
+      </div>
+      <div class="section-block">
+        <div class="section-label">Next Steps</div>
+        <div class="next-steps-box">
+          <p>Netflix to complete VPC allowlist updates across remaining Snowflake accounts using <code>SYSTEM$GET_SNOWFLAKE_PLATFORM_INFO()</code>.</p>
+          <p style="margin-top: 8px;"><strong>Note:</strong> Snowflake provides advance notice of VPC changes via release notes and email notifications to account administrators — we recommend ensuring the relevant contacts are subscribed to Snowflake release communications. Snowflake has also submitted a product feature request for a real-time automated notification mechanism; the account team will follow up on its progress.</p>
+        </div>
+      </div>
+      <div class="section-block">
+        <div class="section-label">Related Jira</div>
+        <span class="jira-ref">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M11.53 2c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.94 4.34 4.34 4.35V2.84a.84.84 0 0 0-.84-.84H11.53zM6.77 6.8a4.362 4.362 0 0 0 4.35 4.34h1.78v1.71a4.362 4.362 0 0 0 4.35 4.34V7.63a.839.839 0 0 0-.84-.83H6.77zM2 11.59c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.97 4.35 4.35 4.35v-9.56a.84.84 0 0 0-.84-.84H2z"/></svg>
+          SNOW-3644746
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Case 01380107 -->
+  <div class="case-card">
+    <div class="case-card-header">
+      <div class="case-card-header-left">
+        <h3>Case 01380107 — Listing Refresh Timeout Errors</h3>
+        <div class="meta">
+          <span>Opened: June 16, 2026</span>
+          <span>Contact: Alex Bohr (alexbohr@netflix.com)</span>
+          <span>Jira: SNOW-3671107</span>
+          <span><a href="https://snowforce.lightning.force.com/lightning/r/Case/500VI00000yQxGSYA0/view" target="_blank" class="sf-link">View in Salesforce ↗</a></span>
+        </div>
+      </div>
+      <span class="badge-split"><span class="b1">Unblocked</span><span class="b2">Fix In Progress</span></span>
+    </div>
+    <div class="case-card-body">
+      <div class="section-block">
+        <div class="section-label">What Happened</div>
+        <p>Calls to <code>SYSTEM$TRIGGER_LISTING_REFRESH</code> for <code>CLEAN_ROOM_INTERNATIONAL_DATA_SHARE</code> were returning a timeout error targeting Azure West Europe consumers. The error was alarming but misleading — all underlying data refreshes completed successfully with a 100% delivery rate throughout the incident period. No data was lost or delayed to your partners.</p>
+      </div>
+      <div class="section-block">
+        <div class="section-label">Root Cause</div>
+        <p>A regression in Snowflake's internal cross-region messaging service caused acknowledgement replies from certain deployments to exceed the function's 60-second timeout window. The refresh itself committed and delivered successfully; only the confirmation signal was delayed.</p>
+      </div>
+      <div class="section-block">
+        <div class="section-label">Where Things Stand Today</div>
+        <p>Your pipelines are <strong>operationally unblocked</strong> using the catch-and-verify pattern — the pipeline catches the timeout error and confirms success via <code>SYSTEM$LISTING_REFRESH_HISTORY_V2</code>. In parallel, Snowflake Engineering has approved and is actively implementing a permanent product fix: the function will be converted to an async model so it no longer raises a hard error for this condition. Once deployed, the workaround will no longer be needed.</p>
+      </div>
+      <div class="section-block">
+        <div class="section-label">Next Steps</div>
+        <div class="next-steps-box">
+          <strong>Immediate:</strong> No action needed — pipelines are running via the catch-and-verify workaround.<br/><br/>
+          <strong>Upcoming:</strong> Snowflake will notify you when the product fix is deployed <strong>(estimated ~2 weeks from June 26)</strong>, at which point the workaround can be removed.
+        </div>
+      </div>
+      <div class="section-block">
+        <div class="section-label">Related Jira</div>
+        <span class="jira-ref">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M11.53 2c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.94 4.34 4.34 4.35V2.84a.84.84 0 0 0-.84-.84H11.53zM6.77 6.8a4.362 4.362 0 0 0 4.35 4.34h1.78v1.71a4.362 4.362 0 0 0 4.35 4.34V7.63a.839.839 0 0 0-.84-.83H6.77zM2 11.59c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.97 4.35 4.35 4.35v-9.56a.84.84 0 0 0-.84-.84H2z"/></svg>
+          SNOW-3671107
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Case 01387602 -->
+  <div class="case-card">
+    <div class="case-card-header">
+      <div class="case-card-header-left">
+        <h3>Case 01387602 — Inconsistent Row Counts from Shared Clean Room View</h3>
+        <div class="meta">
+          <span>Opened: June 24, 2026</span>
+          <span>Contact: Alex Bohr (alexbohr@netflix.com)</span>
+          <span>No Jira filed</span>
+          <span><a href="https://snowforce.lightning.force.com/lightning/r/Case/500VI00000yqcpyYAA/view" target="_blank" class="sf-link">View in Salesforce ↗</a></span>
+        </div>
+      </div>
+      <span class="badge badge-green">Resolved</span>
+    </div>
+    <div class="case-card-body">
+      <div class="section-block">
+        <div class="section-label">What Happened</div>
+        <p>A COUNT query returned 176,494 rows while a subsequent INSERT from the same shared view processed only 98,310 rows, appearing to indicate data loss.</p>
+      </div>
+      <div class="section-block">
+        <div class="section-label">Root Cause</div>
+        <p>No data was lost. The COUNT query was executing against the producer account (US East) and the INSERT against the consumer account (EU Central), which receives data via cross-cloud auto-fulfillment replication. At the time of the queries, the consumer's replicated copy was approximately 2 hours behind the producer — a normal characteristic of asynchronous cross-cloud replication. The INSERT correctly processed every row available in the consumer's view at that moment.</p>
+      </div>
+      <div class="section-block">
+        <div class="section-label">Where Things Stand Today</div>
+        <p>Snowflake provided a deterministic consistency workflow using <code>AVAILABLE_LISTING_REFRESH_HISTORY</code> to confirm the consumer account has fully received a refresh before executing INSERT operations. Polling for <code>PHASE_NAME = 'COMPLETED'</code> before proceeding eliminates the risk of acting on a partially replicated snapshot.</p>
+      </div>
+      <div class="section-block">
+        <div class="section-label">Next Steps</div>
+        <div class="next-steps-box">
+          Netflix to implement the <code>AVAILABLE_LISTING_REFRESH_HISTORY</code> polling check in the pipeline and confirm with Snowflake Support that the workflow meets requirements.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Case 01388550 -->
+  <div class="case-card">
+    <div class="case-card-header">
+      <div class="case-card-header-left">
+        <h3>Case 01388550 — SQL Execution Errors on Shared Iceberg Tables (Azure West Europe)</h3>
+        <div class="meta">
+          <span>Opened: June 25, 2026</span>
+          <span>Contact: Raymond Liu (raymondl@netflix.com)</span>
+          <span>Escalated: Severity 1</span>
+          <span>Jiras: SNOW-3707703, SNOW-1822996</span>
+          <span><a href="https://snowforce.lightning.force.com/lightning/r/Case/500VI00000ytWzDYAU/view" target="_blank" class="sf-link">View in Salesforce ↗</a></span>
+        </div>
+      </div>
+      <span class="badge badge-green">Mitigation Applied</span>
+    </div>
+    <div class="case-card-body">
+      <div class="section-block">
+        <div class="section-label">What Happened</div>
+        <p>The TF1 partner consumer account in Azure West Europe began receiving SQL execution errors when querying tables shared via <code>TF1_FTAB_PROD_LISTING</code>. Four tables were affected in a shifting pattern: <code>tf1_episode_agg</code> and <code>tf1_season_agg</code> remained broken, <code>tf1_total_agg</code> newly failed, and <code>tf1_title_agg</code> recovered. The provider side remained fully operational throughout. This case was escalated to Severity 1 with a dedicated support engineer and Senior Escalation Manager assigned.</p>
+      </div>
+      <div class="section-block">
+        <div class="section-label">Root Cause</div>
+        <p>A cross-cloud data copy process silently wrote zero-byte files to the Azure interop storage layer for the June 24 data partition. When the consumer's query engine attempted to read those files, it received an HTTP range error because the files contained no data. This was a platform-level storage copy failure, not caused by any changes on Netflix's side.</p>
+      </div>
+      <div class="section-block">
+        <div class="section-label">Where Things Stand Today</div>
+        <p>Snowflake Engineering identified and applied a mitigation. The affected tables have recovered. Snowflake's Storage team is working on a long-term fix to prevent silent failures in the cross-cloud copy pipeline from occurring in the future.</p>
+      </div>
+      <div class="section-block">
+        <div class="section-label">Next Steps</div>
+        <div class="next-steps-box">
+          No action needed. If you observe any recurrence of SQL execution errors on the TF1 listing tables, please flag immediately so Engineering can verify the mitigation remains in effect.
+        </div>
+      </div>
+      <div class="section-block">
+        <div class="section-label">Related Jiras</div>
+        <span class="jira-ref">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M11.53 2c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.94 4.34 4.34 4.35V2.84a.84.84 0 0 0-.84-.84H11.53zM6.77 6.8a4.362 4.362 0 0 0 4.35 4.34h1.78v1.71a4.362 4.362 0 0 0 4.35 4.34V7.63a.839.839 0 0 0-.84-.83H6.77zM2 11.59c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.97 4.35 4.35 4.35v-9.56a.84.84 0 0 0-.84-.84H2z"/></svg>
+          SNOW-3707703
+        </span>
+        <span class="jira-ref">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M11.53 2c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.94 4.34 4.34 4.35V2.84a.84.84 0 0 0-.84-.84H11.53zM6.77 6.8a4.362 4.362 0 0 0 4.35 4.34h1.78v1.71a4.362 4.362 0 0 0 4.35 4.34V7.63a.839.839 0 0 0-.84-.83H6.77zM2 11.59c0 2.4 1.97 4.35 4.35 4.35h1.78v1.7c0 2.4 1.97 4.35 4.35 4.35v-9.56a.84.84 0 0 0-.84-.84H2z"/></svg>
+          SNOW-1822996
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p>All four cases were managed with dedicated engineering involvement.</p>
+    <p style="margin-top: 6px;"><strong>Snowflake remains committed to proactive communication on outstanding platform fixes.</strong></p>
+  </div>
+
+</div>
+</body>
+</html>
